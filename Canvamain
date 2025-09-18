@@ -1,0 +1,282 @@
+import javafx.application.Application;
+import javafx.geometry.Point2D;
+import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ColorPicker;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.paint.Color;
+import javafx.stage.FileChooser;
+import javafx.stage.Stage;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main extends Application {
+
+    private final List<Shape> shapes = new ArrayList<>();
+    private Point2D dragStart = null;
+    private Point2D dragNow = null;
+    private Canvas canvas;
+
+    private RadioButton rbLine;
+    private RadioButton rbRect;
+    private RadioButton rbEllipse;
+
+    private ColorPicker colorPicker;   // obrys
+    private CheckBox cbFill;           // czy wypełniać
+    private ColorPicker fillPicker;    // kolor wypełnienia
+
+    private Button btnClear;
+    private Button btnSaveCsv;
+    private Button btnLoadCsv;
+
+    @Override
+    public void start(Stage stage) {
+        canvas = new Canvas(800, 600);
+
+        // wybór figury
+        rbLine = new RadioButton("Linia");
+        rbRect = new RadioButton("Prostokąt");
+        rbEllipse = new RadioButton("Elipsa");
+        ToggleGroup tg = new ToggleGroup();
+        rbLine.setToggleGroup(tg);
+        rbRect.setToggleGroup(tg);
+        rbEllipse.setToggleGroup(tg);
+        rbLine.setSelected(true);
+
+        // kolory i wypełnienie
+        colorPicker = new ColorPicker(Color.BLACK);
+        cbFill = new CheckBox("Wypełnij");
+        fillPicker = new ColorPicker(Color.LIGHTGRAY);
+
+        // przyciski
+        btnClear = new Button("Wyczyść");
+        btnClear.setOnAction(e -> { shapes.clear(); redraw(); });
+
+        btnSaveCsv = new Button("Zapisz CSV");
+        btnSaveCsv.setOnAction(e -> saveCsv(stage));
+
+        btnLoadCsv = new Button("Wczytaj CSV");
+        btnLoadCsv.setOnAction(e -> loadCsv(stage));
+
+        HBox topBar = new HBox(10,
+                rbLine, rbRect, rbEllipse,
+                colorPicker, cbFill, fillPicker,
+                btnClear, btnSaveCsv, btnLoadCsv
+        );
+
+        BorderPane root = new BorderPane();
+        root.setTop(topBar);
+        root.setCenter(canvas);
+        Scene scene = new Scene(root);
+
+        // mysz
+        canvas.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
+            dragStart = new Point2D(e.getX(), e.getY());
+            dragNow = dragStart;
+            redraw();
+        });
+
+        canvas.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> {
+            dragNow = new Point2D(e.getX(), e.getY());
+            redraw();
+        });
+
+        canvas.addEventHandler(MouseEvent.MOUSE_RELEASED, e -> {
+            if (dragStart != null) {
+                Point2D end = new Point2D(e.getX(), e.getY());
+                Color stroke = colorPicker.getValue();
+
+                if (rbLine.isSelected()) {
+                    shapes.add(new Line(stroke, dragStart, end));
+                } else if (rbRect.isSelected()) {
+                    if (cbFill.isSelected()) {
+                        shapes.add(new Rectangle(stroke, dragStart, end, true, fillPicker.getValue()));
+                    } else {
+                        shapes.add(new Rectangle(stroke, dragStart, end));
+                    }
+                } else if (rbEllipse.isSelected()) {
+                    if (cbFill.isSelected()) {
+                        shapes.add(new Ellipse(stroke, dragStart, end, true, fillPicker.getValue()));
+                    } else {
+                        shapes.add(new Ellipse(stroke, dragStart, end));
+                    }
+                }
+            }
+            dragStart = null;
+            dragNow = null;
+            redraw();
+        });
+
+        stage.setTitle("Rysowanie figur — linia / prostokąt / elipsa (kolor, wypełnienie, CSV)");
+        stage.setScene(scene);
+        stage.show();
+        redraw();
+    }
+
+    private void redraw() {
+        GraphicsContext g = canvas.getGraphicsContext2D();
+
+        // tło
+        g.setFill(Color.WHITE);
+        g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        // zapisane figury
+        for (Shape s : shapes) {
+            s.draw(g);
+        }
+
+        // podgląd gumką
+        if (dragStart != null && dragNow != null) {
+            g.setStroke(Color.GRAY);
+            g.setLineDashes(8);
+
+            if (rbLine.isSelected()) {
+                g.strokeLine(dragStart.getX(), dragStart.getY(), dragNow.getX(), dragNow.getY());
+            } else if (rbRect.isSelected()) {
+                double x = Math.min(dragStart.getX(), dragNow.getX());
+                double y = Math.min(dragStart.getY(), dragNow.getY());
+                double w = Math.abs(dragNow.getX() - dragStart.getX());
+                double h = Math.abs(dragNow.getY() - dragStart.getY());
+                g.strokeRect(x, y, w, h);
+            } else if (rbEllipse.isSelected()) {
+                double x = Math.min(dragStart.getX(), dragNow.getX());
+                double y = Math.min(dragStart.getY(), dragNow.getY());
+                double w = Math.abs(dragNow.getX() - dragStart.getX());
+                double h = Math.abs(dragNow.getY() - dragStart.getY());
+                g.strokeOval(x, y, w, h);
+            }
+
+            g.setLineDashes(null);
+        }
+    }
+
+    // === ZAPIS CSV ===
+    private void saveCsv(Stage stage) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Zapisz rysunek jako CSV");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV (*.csv)", "*.csv"));
+        File file = fc.showSaveDialog(stage);
+        if (file == null) return;
+
+        try (BufferedWriter w = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
+            // nagłówek
+            w.write("type,x1,y1,x2,y2,stroke,filled,fill\n");
+
+            for (Shape s : shapes) {
+                String type;
+                boolean filled = false;
+                String fillCol = "";
+
+                if (s instanceof Line) {
+                    type = "LINE";
+                } else if (s instanceof Rectangle) {
+                    type = "RECTANGLE";
+                    Rectangle r = (Rectangle) s;
+                    filled = r.isFilled();
+                    if (filled && r.getFillColor() != null) {
+                        fillCol = r.getFillColor().toString(); // np. 0xrrggbbaa
+                    }
+                } else if (s instanceof Ellipse) {
+                    type = "ELLIPSE";
+                    Ellipse el = (Ellipse) s;
+                    filled = el.isFilled();
+                    if (filled && el.getFillColor() != null) {
+                        fillCol = el.getFillColor().toString();
+                    }
+                } else {
+                    continue;
+                }
+
+                String stroke = s.getStrokeColor().toString();
+                Point2D p1 = s.getTopLeft();
+                Point2D p2 = s.getRightBottom();
+
+                String line = String.join(",",
+                        type,
+                        String.valueOf(p1.getX()),
+                        String.valueOf(p1.getY()),
+                        String.valueOf(p2.getX()),
+                        String.valueOf(p2.getY()),
+                        stroke,
+                        String.valueOf(filled),
+                        fillCol
+                );
+                w.write(line);
+                w.write("\n");
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace(); // najprościej
+        }
+    }
+
+    // === ODCZYT CSV ===
+    private void loadCsv(Stage stage) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Wczytaj rysunek z CSV");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV (*.csv)", "*.csv"));
+        File file = fc.showOpenDialog(stage);
+        if (file == null) return;
+
+        List<Shape> loaded = new ArrayList<>();
+
+        try (BufferedReader r = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+            String row;
+            while ((row = r.readLine()) != null) {
+                row = row.trim();
+                if (row.isEmpty()) continue;
+
+                // pomiń nagłówek
+                if (row.toLowerCase().startsWith("type,")) continue;
+
+                String[] parts = row.split(",", -1);
+                if (parts.length < 8) continue;
+
+                String type = parts[0].trim();
+                double x1 = Double.parseDouble(parts[1]);
+                double y1 = Double.parseDouble(parts[2]);
+                double x2 = Double.parseDouble(parts[3]);
+                double y2 = Double.parseDouble(parts[4]);
+                Color stroke = Color.web(parts[5].trim());
+                boolean filled = Boolean.parseBoolean(parts[6].trim());
+                String fillStr = parts[7].trim();
+                Color fill = (!fillStr.isEmpty() ? Color.web(fillStr) : null);
+
+                Point2D p1 = new Point2D(x1, y1);
+                Point2D p2 = new Point2D(x2, y2);
+
+                if ("LINE".equalsIgnoreCase(type)) {
+                    loaded.add(new Line(stroke, p1, p2));
+                } else if ("RECTANGLE".equalsIgnoreCase(type)) {
+                    if (filled && fill != null) loaded.add(new Rectangle(stroke, p1, p2, true, fill));
+                    else loaded.add(new Rectangle(stroke, p1, p2));
+                } else if ("ELLIPSE".equalsIgnoreCase(type)) {
+                    if (filled && fill != null) loaded.add(new Ellipse(stroke, p1, p2, true, fill));
+                    else loaded.add(new Ellipse(stroke, p1, p2));
+                }
+            }
+
+            shapes.clear();
+            shapes.addAll(loaded);
+            redraw();
+        } catch (Exception ex) {
+            ex.printStackTrace(); // najprościej
+        }
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
