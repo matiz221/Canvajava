@@ -1,0 +1,128 @@
+import javafx.geometry.Point2D;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+
+public abstract class Shape {
+    protected Color strokeColor;
+    protected Point2D topLeft;
+    protected Point2D rightBottom;
+
+    protected Shape(Color strokeColor, Point2D topLeft, Point2D rightBottom) {
+        this.strokeColor = strokeColor;
+        this.topLeft = topLeft;
+        this.rightBottom = rightBottom;
+    }
+
+    public abstract void draw(GraphicsContext g);
+
+    // gettery do CSV
+    public Color getStrokeColor() { return strokeColor; }
+    public Point2D getTopLeft() { return topLeft; }
+    public Point2D getRightBottom() { return rightBottom; }
+}
+
+import javafx.geometry.Point2D;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+
+public class Line extends Shape {
+
+    public Line(Color strokeColor, Point2D start, Point2D end) {
+        super(strokeColor, start, end);
+    }
+
+    @Override
+    public void draw(GraphicsContext g) {
+        g.setStroke(strokeColor);
+        g.strokeLine(topLeft.getX(), topLeft.getY(), rightBottom.getX(), rightBottom.getY());
+    }
+}
+
+import javafx.geometry.Point2D;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+
+public class Rectangle extends Shape {
+
+    private final boolean filled;
+    private final Color fillColor;
+
+    // bez wypełnienia
+    public Rectangle(Color strokeColor, Point2D p1, Point2D p2) {
+        super(strokeColor, p1, p2);
+        this.filled = false;
+        this.fillColor = null;
+    }
+
+    // z wypełnieniem
+    public Rectangle(Color strokeColor, Point2D p1, Point2D p2, boolean filled, Color fillColor) {
+        super(strokeColor, p1, p2);
+        this.filled = filled;
+        this.fillColor = fillColor;
+    }
+
+    @Override
+    public void draw(GraphicsContext g) {
+        double x = Math.min(topLeft.getX(), rightBottom.getX());
+        double y = Math.min(topLeft.getY(), rightBottom.getY());
+        double w = Math.abs(rightBottom.getX() - topLeft.getX());
+        double h = Math.abs(rightBottom.getY() - topLeft.getY());
+
+        if (filled && fillColor != null) {
+            g.setFill(fillColor);
+            g.fillRect(x, y, w, h);
+        }
+
+        g.setStroke(strokeColor);
+        g.strokeRect(x, y, w, h);
+    }
+
+    public boolean isFilled() { return filled; }
+    public Color getFillColor() { return fillColor; }
+}
+
+
+
+import javafx.geometry.Point2D;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+
+public class Ellipse extends Shape {
+
+    private final boolean filled;
+    private final Color fillColor;
+
+    // bez wypełnienia
+    public Ellipse(Color strokeColor, Point2D p1, Point2D p2) {
+        super(strokeColor, p1, p2);
+        this.filled = false;
+        this.fillColor = null;
+    }
+
+    // z wypełnieniem
+    public Ellipse(Color strokeColor, Point2D p1, Point2D p2, boolean filled, Color fillColor) {
+        super(strokeColor, p1, p2);
+        this.filled = filled;
+        this.fillColor = fillColor;
+    }
+
+    @Override
+    public void draw(GraphicsContext g) {
+        double x = Math.min(topLeft.getX(), rightBottom.getX());
+        double y = Math.min(topLeft.getY(), rightBottom.getY());
+        double w = Math.abs(rightBottom.getX() - topLeft.getX());
+        double h = Math.abs(rightBottom.getY() - topLeft.getY());
+
+        if (filled && fillColor != null) {
+            g.setFill(fillColor);
+            g.fillOval(x, y, w, h);
+        }
+
+        g.setStroke(strokeColor);
+        g.strokeOval(x, y, w, h);
+    }
+
+    public boolean isFilled() { return filled; }
+    public Color getFillColor() { return fillColor; }
+}
+
